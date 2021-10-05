@@ -11,6 +11,8 @@
 #include <signal.h>
 #include "sh.h"
 
+extern char *environ;
+
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
@@ -18,7 +20,7 @@ int sh( int argc, char **argv, char **envp )
   char *command, *arg, *commandpath, *p, *pwd, *owd, *cwd;
   char *buffer = calloc(MAX, sizeof(char));
   char **args = calloc(MAXARGS, sizeof(char*));
-  int uid, i, status, argsct, go = 1, pos = 0;
+  int uid, i, pid, status, argsct, go = 1, pos = 0;
   struct passwd *password_entry;
   char *homedir;
   struct pathelement *pathlist;
@@ -35,6 +37,7 @@ int sh( int argc, char **argv, char **envp )
   }
   owd = calloc(strlen(pwd) + 1, sizeof(char));
   memcpy(owd, pwd, strlen(pwd));
+  owd = getcwd(NULL, PATH_MAX + 1);
   prompt[0] = ' '; prompt[1] = '\0';
 
   /* Put PATH into a linked list */
@@ -59,13 +62,18 @@ int sh( int argc, char **argv, char **envp )
     }
   
   /* check for each built in command and implement */
+    
     if(strcmp(args[0],"exit")==0){
       exitShell();
     }
       
     else if(strcmp(args[0],"which")==0){
       if(args[1]!=NULL){
-        which(args[1],pathlist);
+        char *path = which(args[1],pathlist);
+	if(path){
+	  printf("%s\n",path);
+	  free(path);
+	}
       }
 
       else{
@@ -83,67 +91,111 @@ int sh( int argc, char **argv, char **envp )
 	printf("Where: Too few arguments\n");
     
       }
-    
     }
 
     else if(strcmp(args[0],"cd")==0){
-      owd = cwd;
+
       if(args[1]!=NULL){
-	if(strcmp(args[1],"-")==0){
-          cd(owd);
+	//NEED TO FIX
+	if(strcmp(args[1],"-") == 0){
+          chdir(owd);
+	  owd = getcwd(NULL, PATH_MAX + 1);
         }
 
-        cd(args[1]);
+	else if(access(args[1],X_OK)==0){
+          owd = getcwd(NULL, PATH_MAX + 1);
+	  chdir(args[1]);
+	}
+      }
+
+      else if(args[1] == NULL){
+        owd = getcwd(NULL, PATH_MAX + 1);
+	chdir(homedir);
       }
 
       else{
-	 cd(pwd);
+        printf("You do not have authorization");
       }
     }
-    pos = 0; 
+
+    else if(strcmp(args[0],"pwd")==0){
+      printf("%s\n",getcwd(NULL, PATH_MAX + 1));
+    }
+
+    else if(strcmp(args[0],"pid") == 0){
+      printf("%d\n",getpid());
+    }
+ 
   /*  else  program to exec */
-    {
+    else{
        /* find it */
+
+       if(which(args[0], pathlist) != NULL){
+
        /* do fork(), execve() and waitpid() */
 
-      /* else */
-        /* fprintf(stderr, "%s: Command not found.\n", args[0]); */
+         if((pid = fork()) < 0){
+           perror("fork");
+	   exit(2);
+	 }
+
+	 else if(pid == 0){
+
+           printf("Executing built-in [%s]\n",args[0]);
+
+           if(execve(args[0],args, NULL) < 0){
+             perror("Execve error");
+	     exit(2);
+	   }
+	 }
+
+	 else if(waitpid(pid, &status, 0) != 0){
+	     perror("Wait eorror");
+             exit(WEXITSTATUS(status));
+           }
+         }	 
+
+       else{
+         fprintf(stderr, "%s: Command not found.\n", args[0]);
+       }
     }
+
+    pos = 0;
   }
   return 0;
 } /* sh() */
 
+//Side effect: Mallocs memory so you must free it after running the command
 char *which(char *command, struct pathelement *pathlist )
 {
   /* loop through pathlist until finding command and return it.  Return
   NULL when not found. */
- 
+  
+  char * tmp = malloc(strlen(pathlist->element)+1+strlen(command)+1);
   while (pathlist) {         // WHICH
-    sprintf(command, "%s", pathlist->element);
-    if (access(command, X_OK) == 0) {
-      printf("[%s]\n", command);
-      break;
+    sprintf(tmp, "%s/%s", pathlist->element, command);
+    if (access(tmp, X_OK) == 0) {
+      return tmp; 
     }
-
     pathlist = pathlist->next;
   }
   return NULL;
 
 } /* which() */
 
-char *where(char *command, struct pathelement *pathlist )
+void *where(char *command, struct pathelement *pathlist )
 {
   /* similarly loop through finding all locations of command */
 
+  char *tmp = malloc(strlen(pathlist->element)+1+strlen(command)+1);
   while(pathlist){
-    sprintf(command, "%s", pathlist->element);
-      if(access(command, F_OK)==0){
-              printf("[%s]\n", command);
-                break;
+    sprintf(tmp, "%s/%s", pathlist->element,command);
+      if(access(tmp, F_OK) == 0){
+                printf("%s\n",tmp);
 	    }
 	    pathlist = pathlist->next;
 	}
-	return NULL;
+  free(tmp);
 } /* where() */
 
 void list ( char *dir )
