@@ -7,7 +7,7 @@ char *which(char *command, struct pathelement *pathlist);
 void *where(char *command, struct pathelement *pathlist);
 void list ( char *dir );
 void cd(char *path);
-void exitShell();
+void exitShell(char *buffer, char *prompt, char **args);
 void printenv(char **envp);
 
 #define PROMPTMAX 32

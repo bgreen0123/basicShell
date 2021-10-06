@@ -11,8 +11,9 @@
 #include <signal.h>
 #include "sh.h"
 
-extern char *environ;
+extern char **environ;
 
+//Side effect of making a buffer, must free it.
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
@@ -64,11 +65,13 @@ int sh( int argc, char **argv, char **envp )
   /* check for each built in command and implement */
     
     if(strcmp(args[0],"exit")==0){
-      exitShell();
+      printf("Execting [%s]\n",args[0]);
+      exitShell(buffer, prompt, args);
     }
       
     else if(strcmp(args[0],"which")==0){
       if(args[1]!=NULL){
+	printf("Execting [%s]\n",args[0]);
         char *path = which(args[1],pathlist);
 	if(path){
 	  printf("%s\n",path);
@@ -84,6 +87,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0],"where")==0){
       if(args[1]!=NULL){
+	printf("Execting [%s]\n",args[0]);
         where(args[1],pathlist);
       }
 
@@ -95,6 +99,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0],"cd")==0){
 
+      printf("Execting [%s]\n",args[0]);
       if(args[1]!=NULL){
 	//NEED TO FIX
 	if(strcmp(args[1],"-") == 0){
@@ -119,10 +124,12 @@ int sh( int argc, char **argv, char **envp )
     }
 
     else if(strcmp(args[0],"pwd")==0){
+      printf("Execting [%s]\n",args[0]);
       printf("%s\n",getcwd(NULL, PATH_MAX + 1));
     }
 
     else if(strcmp(args[0],"pid") == 0){
+      printf("Execting [%s]\n",args[0]);
       printf("%d\n",getpid());
     }
  
@@ -130,7 +137,7 @@ int sh( int argc, char **argv, char **envp )
     else{
        /* find it */
 
-       if(which(args[0], pathlist) != NULL){
+       if(strcpy(commandpath,which(args[0], pathlist)) != NULL){
 
        /* do fork(), execve() and waitpid() */
 
@@ -143,13 +150,13 @@ int sh( int argc, char **argv, char **envp )
 
            printf("Executing built-in [%s]\n",args[0]);
 
-           if(execve(args[0],args, NULL) < 0){
+           if(execve(commandpath, args, environ) < 0){
              perror("Execve error");
 	     exit(2);
 	   }
 	 }
 
-	 else if(waitpid(pid, &status, 0) != 0){
+	 else if(waitpid(pid, &status, 0) == -1){
 	     perror("Wait eorror");
              exit(WEXITSTATUS(status));
            }
@@ -208,12 +215,13 @@ void cd(char *path){
   /* Change directory to the path that the user specifies*/
   if(chdir(path)!=0){
     printf("No such file or directory\n");
-  
-
   }
 }
 
-void exitShell(){
-	exit(0);
+void exitShell(char *buffer, char *prompt, char **args){
+  free(buffer);
+  free(prompt);
+  free(args);
+  exit(0);
 }
 
