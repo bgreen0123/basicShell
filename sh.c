@@ -100,7 +100,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0],"cd")==0){
       printf("Execting built-in [%s]\n",args[0]);
-      cd(args, owd, cwd, homedir);
+      cd(args, owd, cwd);
     }
 
     else if(strcmp(args[0],"pwd")==0){
@@ -116,6 +116,27 @@ int sh( int argc, char **argv, char **envp )
     else if(strcmp(args[0],"list")==0){
       printf("Executing built-in [%s]\n",args[0]);
       list(cwd);
+    } 
+
+
+    /*
+     * last remaining commands to support
+     */
+
+    else if(strcmp(args[0], "printenv")==0){
+	    printf("Executing built-in [%s]\n", args[0]);
+    }
+
+    else if(strcmp(args[0], "setenv")==0){
+	    printf("Executing built-in [%s]\n", args[0]);
+    }
+
+    else if(strcmp(args[0], "prompt")==0){
+	    printf("Executing built-in [%s]\n", args[0]);
+    }
+
+    else if(strcmp(args[0], "kill")==0){
+	    printf("Executing built-in [%s]\n", args[0]);
     }
  
   /*  else  program to exec */
@@ -207,37 +228,47 @@ void list ( char *dir ){
   }
 } /* list() */
 
-void cd(char **args, char *owd, char *cwd, char *homedir){
+void cd(char **args, char *owd, char *cwd){
   /* Change directory to the path that the user specifies*/
 
   char *tmp;
   tmp = calloc(strlen(owd) + 1, sizeof(char));
-  memcpy(tmp, owd, strlen(owd));
+  memcpy(tmp, owd, strlen(owd)); //copies n bytes from owd into tmp
 
-  if(args[1] != NULL){
-    //NEED TO FIX
-    
-    if((strcmp(args[1],"-") != 0) && (access(args[1],X_OK) == 0)){
-      owd = getcwd(NULL, PATH_MAX + 1);
-      chdir(args[1]);
-    }
-	 
-    else if(strcmp(args[1],"-") == 0){
-      tmp =cwd;
-      chdir(owd);
-      owd = tmp;
-    }
+  if(args[1] == NULL){ // no argument, goes to home directory 
+	
+	  printf("testing \n");
+
+	  printf("Home: %s\n", getenv("HOME"));
+	  chdir(getenv("HOME"));
+	  strcpy(cwd, getcwd(NULL, 0)); //updating cwd
+
+  } else if(strcmp(args[1], "-") == 0){ // go to previous directory
+
+
+	/* copy owd into tmp, so tmp now = old working directory
+	 * copy cwd into owd, owd = cwd, wanna make sure you change owd before calling, so now we can go back if called again with - argument
+	 * change directory with tmp
+	 * update cwd
+	 */
+	
+	  strcpy(tmp, owd);
+	  strcpy(owd, getcwd(NULL, 0));
+	  chdir(tmp);
+	  strcpy(cwd, getcwd(NULL, 0));
+
+  } else { // standard cd functionality
+	
+	/* owd now contains current cwd
+	 * call change directory with user argument
+	 * update cwd to new directory you changed to
+	 */
+
+	  strcpy(owd, getcwd(NULL, 0));
+	  chdir(args[1]);
+	  strcpy(cwd, getcwd(NULL, 0));
   }
 
-  else if(args[1] == NULL){
-    printf("Home: %s\n",homedir);
-    owd = getcwd(NULL, PATH_MAX + 1);
-    chdir(homedir);
-  }
-
-  else{
-    printf("You do not have authorization");
-  }
 }
 
 void exitShell(char *buffer, char *prompt, char **args){
