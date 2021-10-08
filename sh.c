@@ -17,8 +17,8 @@ extern char **environ;
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
-  char *commandline = calloc(MAX_CANON, sizeof(char));
-  char *command, *arg, *commandpath, *p, *pwd, *owd, *cwd;
+  char *commandpath = calloc(MAX_CANON, sizeof(char));
+  char *command, *arg, *p, *pwd, *owd, *cwd;
   char *buffer = calloc(MAX, sizeof(char));
   char **args = calloc(MAXARGS, sizeof(char*));
   int uid, i, pid, status, argsct, go = 1, pos = 0;
@@ -36,6 +36,7 @@ int sh( int argc, char **argv, char **envp )
     perror("getcwd");
     exit(2);
   }
+
   owd = calloc(strlen(pwd) + 1, sizeof(char));
   memcpy(owd, pwd, strlen(pwd));
   owd = getcwd(NULL, PATH_MAX + 1);
@@ -65,13 +66,13 @@ int sh( int argc, char **argv, char **envp )
   /* check for each built in command and implement */
     
     if(strcmp(args[0],"exit")==0){
-      printf("Execting [%s]\n",args[0]);
+      printf("Execting built-in [%s]\n",args[0]);
       exitShell(buffer, prompt, args);
     }
       
     else if(strcmp(args[0],"which")==0){
       if(args[1]!=NULL){
-	printf("Execting [%s]\n",args[0]);
+	printf("Execting built-in [%s]\n",args[0]);
         char *path = which(args[1],pathlist);
 	if(path){
 	  printf("%s\n",path);
@@ -87,7 +88,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0],"where")==0){
       if(args[1]!=NULL){
-	printf("Execting [%s]\n",args[0]);
+	printf("Execting built-in [%s]\n",args[0]);
         where(args[1],pathlist);
       }
 
@@ -98,46 +99,30 @@ int sh( int argc, char **argv, char **envp )
     }
 
     else if(strcmp(args[0],"cd")==0){
-
-      printf("Execting [%s]\n",args[0]);
-      if(args[1]!=NULL){
-	//NEED TO FIX
-	if(strcmp(args[1],"-") == 0){
-          chdir(owd);
-	  owd = getcwd(NULL, PATH_MAX + 1);
-        }
-
-	else if(access(args[1],X_OK)==0){
-          owd = getcwd(NULL, PATH_MAX + 1);
-	  chdir(args[1]);
-	}
-      }
-
-      else if(args[1] == NULL){
-        owd = getcwd(NULL, PATH_MAX + 1);
-	chdir(homedir);
-      }
-
-      else{
-        printf("You do not have authorization");
-      }
+      printf("Execting built-in [%s]\n",args[0]);
+      cd(args, owd, cwd, homedir);
     }
 
     else if(strcmp(args[0],"pwd")==0){
-      printf("Execting [%s]\n",args[0]);
+      printf("Execting built-in [%s]\n",args[0]);
       printf("%s\n",getcwd(NULL, PATH_MAX + 1));
     }
 
     else if(strcmp(args[0],"pid") == 0){
-      printf("Execting [%s]\n",args[0]);
+      printf("Execting built-in [%s]\n",args[0]);
       printf("%d\n",getpid());
+    }
+
+    else if(strcmp(args[0],"list")==0){
+      printf("Executing built-in [%s]\n",args[0]);
+      list(cwd);
     }
  
   /*  else  program to exec */
     else{
        /* find it */
-
-       if(strcpy(commandpath,which(args[0], pathlist)) != NULL){
+       strcpy(commandpath,which(args[0],pathlist));
+       if(strcmp(commandpath,"1") != 0){
 
        /* do fork(), execve() and waitpid() */
 
@@ -148,7 +133,7 @@ int sh( int argc, char **argv, char **envp )
 
 	 else if(pid == 0){
 
-           printf("Executing built-in [%s]\n",args[0]);
+           printf("Executing [%s]\n",args[0]);
 
            if(execve(commandpath, args, environ) < 0){
              perror("Execve error");
@@ -177,7 +162,7 @@ char *which(char *command, struct pathelement *pathlist )
 {
   /* loop through pathlist until finding command and return it.  Return
   NULL when not found. */
-  
+  char *exit = "1";
   char * tmp = malloc(strlen(pathlist->element)+1+strlen(command)+1);
   while (pathlist) {         // WHICH
     sprintf(tmp, "%s/%s", pathlist->element, command);
@@ -186,7 +171,8 @@ char *which(char *command, struct pathelement *pathlist )
     }
     pathlist = pathlist->next;
   }
-  return NULL;
+  free(tmp);
+  return exit;
 
 } /* which() */
 
@@ -205,16 +191,52 @@ void *where(char *command, struct pathelement *pathlist )
   free(tmp);
 } /* where() */
 
-void list ( char *dir )
-{
-  /* see man page for opendir() and readdir() and print out filenames for
-  the directory passed */
+void list ( char *dir ){
+
+  DIR *files;
+  struct dirent *entry;
+
+  if((files = opendir(dir)) == NULL){
+    perror("list Error");
+  }
+  else{
+    while((entry = readdir(files)) != NULL){
+      printf("%s\n",entry->d_name);
+    }
+    closedir(files);
+  }
 } /* list() */
 
-void cd(char *path){
+void cd(char **args, char *owd, char *cwd, char *homedir){
   /* Change directory to the path that the user specifies*/
-  if(chdir(path)!=0){
-    printf("No such file or directory\n");
+
+  char *tmp;
+  tmp = calloc(strlen(owd) + 1, sizeof(char));
+  memcpy(tmp, owd, strlen(owd));
+
+  if(args[1] != NULL){
+    //NEED TO FIX
+    
+    if((strcmp(args[1],"-") != 0) && (access(args[1],X_OK) == 0)){
+      owd = getcwd(NULL, PATH_MAX + 1);
+      chdir(args[1]);
+    }
+	 
+    else if(strcmp(args[1],"-") == 0){
+      tmp =cwd;
+      chdir(owd);
+      owd = tmp;
+    }
+  }
+
+  else if(args[1] == NULL){
+    printf("Home: %s\n",homedir);
+    owd = getcwd(NULL, PATH_MAX + 1);
+    chdir(homedir);
+  }
+
+  else{
+    printf("You do not have authorization");
   }
 }
 
