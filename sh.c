@@ -62,17 +62,18 @@ int sh( int argc, char **argv, char **envp )
 
       arg = strtok(NULL, TOK_DELIM);
     }
+    args[pos++] = NULL;
   
   /* check for each built in command and implement */
     
     if(strcmp(args[0],"exit")==0){
-      printf("Execting built-in [%s]\n",args[0]);
+      printf("Executing built-in [%s]\n",args[0]);
       exitShell(buffer, prompt, args);
     }
       
     else if(strcmp(args[0],"which")==0){
       if(args[1]!=NULL){
-	printf("Execting built-in [%s]\n",args[0]);
+	printf("Executing built-in [%s]\n",args[0]);
         char *path = which(args[1],pathlist);
 	if(path){
 	  printf("%s\n",path);
@@ -88,7 +89,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0],"where")==0){
       if(args[1]!=NULL){
-	printf("Execting built-in [%s]\n",args[0]);
+	printf("Executing built-in [%s]\n",args[0]);
         where(args[1],pathlist);
       }
 
@@ -99,36 +100,37 @@ int sh( int argc, char **argv, char **envp )
     }
 
     else if(strcmp(args[0],"cd")==0){
-      printf("Execting built-in [%s]\n",args[0]);
+      printf("Executing built-in [%s]\n",args[0]);
       cd(args, owd, cwd);
     }
 
     else if(strcmp(args[0],"pwd")==0){
-      printf("Execting built-in [%s]\n",args[0]);
+      printf("Executing built-in [%s]\n",args[0]);
       printf("%s\n",getcwd(NULL, PATH_MAX + 1));
     }
 
     else if(strcmp(args[0],"pid") == 0){
-      printf("Execting built-in [%s]\n",args[0]);
+      printf("Executing built-in [%s]\n",args[0]);
       printf("%d\n",getpid());
     }
 
     else if(strcmp(args[0],"list")==0){
       printf("Executing built-in [%s]\n",args[0]);
       list(cwd);
-    } 
-
-
-    /*
-     * last remaining commands to support
-     */
+    }
 
     else if(strcmp(args[0], "printenv")==0){
-	    printf("Executing built-in [%s]\n", args[0]);
+        printf("Executing built-in [%s]\n", args[0]);
+	printenv(args,environ);
     }
+
+    /*
+     * last remaining commands to implement
+     */
 
     else if(strcmp(args[0], "setenv")==0){
 	    printf("Executing built-in [%s]\n", args[0]);
+	    setenviron(args,environ,pathlist);
     }
 
     else if(strcmp(args[0], "prompt")==0){
@@ -174,6 +176,9 @@ int sh( int argc, char **argv, char **envp )
     }
 
     pos = 0;
+  }
+  for(int i = 0; i<sizeof(args); i++){
+      args[i] = 0;
   }
   return 0;
 } /* sh() */
@@ -237,7 +242,6 @@ void cd(char **args, char *owd, char *cwd){
 
   if(args[1] == NULL){ // no argument, goes to home directory 
 	
-	  printf("testing \n");
 
 	  printf("Home: %s\n", getenv("HOME"));
 	  chdir(getenv("HOME"));
@@ -257,7 +261,7 @@ void cd(char **args, char *owd, char *cwd){
 	  chdir(tmp);
 	  strcpy(cwd, getcwd(NULL, 0));
 
-  } else { // standard cd functionality
+  } else if((args[1] != NULL) && (access(args[1], X_OK) == 0)) { // standard cd functionality
 	
 	/* owd now contains current cwd
 	 * call change directory with user argument
@@ -267,8 +271,66 @@ void cd(char **args, char *owd, char *cwd){
 	  strcpy(owd, getcwd(NULL, 0));
 	  chdir(args[1]);
 	  strcpy(cwd, getcwd(NULL, 0));
+  } else{
+	  printf("No directory called: %s\n",args[1]);
   }
+}
 
+void printenv(char **args, char **environ){
+    int i = 0;
+    char *env;
+    if(args[1] == NULL){
+	while(environ[i] != NULL){
+	    printf("%s\n",environ[i]);
+	    i++;
+	}
+    }
+    else if((args[1] != NULL) && (args[2] == NULL)){
+        env = getenv(args[1]);
+	if(env != NULL){
+	    printf("%s\n",env);
+	}
+    }
+    else{
+	printf("%s: Too many arguments.\n",args[0]);
+    }
+}
+
+void setenviron(char **args, char **environ, struct pathelement *pathlist){
+    struct pathelement *newPath, *tmp;
+     /*
+     * For some reason when you set some env variable
+     * you then cannot print our the env. I think it 
+     * has something to do with the args list!
+     */
+
+    if(args[1] == NULL){
+	printenv(args,environ);
+    }
+    else if(args[1] != NULL && args[2] == NULL){
+	setenv(args[1],"",1);
+    }
+    else if(args[2] != NULL && args[3] == NULL){
+	if(strcmp(args[1],"PATH") == 0){//check is user is changing PATH
+            setenv(args[1], args[2], 1);//change the environment variable
+            newPath = get_path();//get the new path
+	    while(pathlist!=NULL){//Loop until end of list, freeing each node in the list
+		tmp = pathlist;
+		pathlist = pathlist->next;
+		free(tmp);
+	    }
+	    pathlist = newPath;//set the head of newPath to pathlist
+	}
+	else if(strcmp(args[1], "HOME") == 0){//check if the user us changing HOME
+	    setenv(args[1],args[2],1);//change the env variable to be what the user inputted
+	}
+        else{
+	   setenv(args[1],args[2],0);
+	}	   
+    }
+    else{
+	printf("%s: Too many arguments.\n",args[0]);
+    }
 }
 
 void exitShell(char *buffer, char *prompt, char **args){
