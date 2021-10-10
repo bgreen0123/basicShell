@@ -10,6 +10,7 @@ void cd(char **args, char *owd, char *cwd);
 void exitShell(char *buffer, char *prompt, char **args);
 void printenv(char **args, char **environ);
 void setenviron(char **args, char **envrion, struct pathelement *pathlist);
+void killProcess(char **args);
 
 #define PROMPTMAX 32
 #define MAXARGS 10

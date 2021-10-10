@@ -138,7 +138,12 @@ int sh( int argc, char **argv, char **envp )
     }
 
     else if(strcmp(args[0], "kill")==0){
-	    printf("Executing built-in [%s]\n", args[0]);
+	    if (args[1] != NULL){
+		printf("Executing built-in [%s]\n", args[0]);
+	   	killProcess(args);
+	    } else {
+	        printf("Kill: Too few arguments\n");
+	    }
     }
  
   /*  else  program to exec */
@@ -331,6 +336,16 @@ void setenviron(char **args, char **environ, struct pathelement *pathlist){
     else{
 	printf("%s: Too many arguments.\n",args[0]);
     }
+}
+
+void killProcess(char **args){
+	if(args[2] == NULL){ // given just a pid, sends a sigterm to it
+		kill(getpid(), SIGTERM);
+	} else if (args[2] != NULL){
+		int signal = atoi(args[1]); // converts to integer
+		signal = signal*(-1); // signal number with a - in front of it
+		kill(getpid(), signal); 
+	}
 }
 
 void exitShell(char *buffer, char *prompt, char **args){
