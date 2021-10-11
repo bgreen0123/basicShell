@@ -1,3 +1,5 @@
+#Brendan Green and Ryan Allarey
+
 # choose your compiler
 CC=gcc
 #CC=gcc -Wall

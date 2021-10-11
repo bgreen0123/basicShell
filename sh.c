@@ -1,3 +1,5 @@
+//Brendan Green and Ryan Allarey
+
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -13,7 +15,13 @@
 
 extern char **environ;
 
-//Side effect of making a buffer, must free it.
+/*
+ *Name: This function is named sh because it is the logic behine the bulk of our shell.
+ *Function: sh is responsible for taking user input, cutting it into tokens and then calling the correct command.
+ *Param: sh takes in an integer, an array of strings, and the environment.
+ *Return: Returns an interger of 0 upon success.
+ *Side affects: This function mallocs memory for multiple varibales that must be freed. Such as prompt, commandpath, args, buffer, owd, cwd, and pwd.
+ */ 
 int sh( int argc, char **argv, char **envp )
 {
   char *prompt = calloc(PROMPTMAX, sizeof(char));
@@ -51,24 +59,22 @@ int sh( int argc, char **argv, char **envp )
     cwd = getcwd(NULL, PATH_MAX+1);
 
     /* print your prompt */
-    printf("%s%s > ",prompt,cwd);
+    printf("%s [%s] > ",prompt,cwd);
     fgets(buffer, MAX, stdin);
-    
-    /* get command line and process */
-    arg = strtok(buffer,TOK_DELIM);
-    while(arg!=NULL){
-      args[pos] = arg;
-      pos++;
-
-      arg = strtok(NULL, TOK_DELIM);
-    }
-    args[pos++] = NULL;
+    	/* get command line and process */
+    	arg = strtok(buffer,TOK_DELIM);
+    	while(arg!=NULL){
+      	  args[pos] = arg;
+      	  pos++;
+      	  arg = strtok(NULL, TOK_DELIM);
+    	}
+    	args[pos++] = NULL;
   
   /* check for each built in command and implement */
     
     if(strcmp(args[0],"exit")==0){
       printf("Executing built-in [%s]\n",args[0]);
-      exitShell(buffer, prompt, args);
+      exitShell(buffer, prompt, pathlist, pwd, owd, cwd);
     }
       
     else if(strcmp(args[0],"which")==0){
@@ -77,6 +83,9 @@ int sh( int argc, char **argv, char **envp )
         char *path = which(args[1],pathlist);
 	if(path){
 	  printf("%s\n",path);
+	  free(path);
+	}
+	else{
 	  free(path);
 	}
       }
@@ -124,10 +133,6 @@ int sh( int argc, char **argv, char **envp )
 	printenv(args,environ);
     }
 
-    /*
-     * last remaining commands to implement
-     */
-
     else if(strcmp(args[0], "setenv")==0){
 	    printf("Executing built-in [%s]\n", args[0]);
 	    setenviron(args,environ,pathlist);
@@ -135,6 +140,7 @@ int sh( int argc, char **argv, char **envp )
 
     else if(strcmp(args[0], "prompt")==0){
 	    printf("Executing built-in [%s]\n", args[0]);
+	    promptUser(args,prompt);
     }
 
     else if(strcmp(args[0], "kill")==0){
@@ -156,6 +162,7 @@ int sh( int argc, char **argv, char **envp )
 
          if((pid = fork()) < 0){
            perror("fork");
+	   free(commandpath);
 	   exit(2);
 	 }
 
@@ -165,12 +172,14 @@ int sh( int argc, char **argv, char **envp )
 
            if(execve(commandpath, args, environ) < 0){
              perror("Execve error");
+	     free(commandpath);
 	     exit(2);
 	   }
 	 }
 
 	 else if(waitpid(pid, &status, 0) == -1){
 	     perror("Wait eorror");
+	     free(commandpath);
              exit(WEXITSTATUS(status));
            }
          }	 
@@ -178,17 +187,27 @@ int sh( int argc, char **argv, char **envp )
        else{
          fprintf(stderr, "%s: Command not found.\n", args[0]);
        }
+
+       free(commandpath);
     }
 
     pos = 0;
   }
-  for(int i = 0; i<sizeof(args); i++){
-      args[i] = 0;
+  free(cwd);
+  for(int i = 0; i<sizeof args; i++){
+          free(args[1]);
   }
   return 0;
 } /* sh() */
 
 //Side effect: Mallocs memory so you must free it after running the command
+/*
+ * Name: This function is named which. It is named this because it looks through the pathlist and finds the command asked for.
+ * Function: which will loop through pathlist until finding the command it is looking for then returns the path to it.
+ * Param: Which takes in a string holding the command the user wants to find, and a pathelement struct holding the pathlist to all files.
+ * Return: Which returns the path to the command.
+ * Side Affects: Which allocates memory so we must free it after which is run.
+ */
 char *which(char *command, struct pathelement *pathlist )
 {
   /* loop through pathlist until finding command and return it.  Return
@@ -207,6 +226,13 @@ char *which(char *command, struct pathelement *pathlist )
 
 } /* which() */
 
+/*
+ * Name: This function is called where because it finds every path to where that command exisits.
+ * Function: Where will loop through the pathlist and find every path to the wanted command.
+ * Param: Where takes in a string holding the command the user want to find, and a pathelement struct holding the pathlist to all files.
+ * Returns: Where returns nothing.
+ * Side Affects: Where doesn't change anything outside of itself.
+ */
 void *where(char *command, struct pathelement *pathlist )
 {
   /* similarly loop through finding all locations of command */
@@ -221,6 +247,14 @@ void *where(char *command, struct pathelement *pathlist )
 	}
   free(tmp);
 } /* where() */
+
+/*
+ * Name: this function is called list and is called when the user types the list command into our shell.
+ * Function: list will list the files in the cwd, one per line.
+ * Param: dir, the directory name
+ * Side effects: doesn't change anything outside of the function
+ * Returns: List returns nothing
+ */
 
 void list ( char *dir ){
 
@@ -238,6 +272,15 @@ void list ( char *dir ){
   }
 } /* list() */
 
+/*
+ * Name: this is the cd function for when the user types the cd command into our shell. cd means change directory.
+ * Function: this function is the logic for changing the directory that the user is in.
+ * Param: args, the argument list for the cd command. owd, old working directory. cwd, current working directory.
+ * owd and cwd allow us to change and keep track of where the user is to be able to change the directory as necessary
+ * Side effects: changes current working directory of the user and old working directory
+ * Returns: void function, no returns
+ */
+
 void cd(char **args, char *owd, char *cwd){
   /* Change directory to the path that the user specifies*/
 
@@ -247,10 +290,8 @@ void cd(char **args, char *owd, char *cwd){
 
   if(args[1] == NULL){ // no argument, goes to home directory 
 	
-
-	  printf("Home: %s\n", getenv("HOME"));
 	  chdir(getenv("HOME"));
-	  strcpy(cwd, getcwd(NULL, 0)); //updating cwd
+	  getcwd(cwd, sizeof cwd); //updating cwd
 
   } else if(strcmp(args[1], "-") == 0){ // go to previous directory
 
@@ -262,9 +303,9 @@ void cd(char **args, char *owd, char *cwd){
 	 */
 	
 	  strcpy(tmp, owd);
-	  strcpy(owd, getcwd(NULL, 0));
+	  getcwd(owd, sizeof owd);
 	  chdir(tmp);
-	  strcpy(cwd, getcwd(NULL, 0));
+	  getcwd(cwd,sizeof cwd);
 
   } else if((args[1] != NULL) && (access(args[1], X_OK) == 0)) { // standard cd functionality
 	
@@ -273,14 +314,22 @@ void cd(char **args, char *owd, char *cwd){
 	 * update cwd to new directory you changed to
 	 */
 
-	  strcpy(owd, getcwd(NULL, 0));
+	  getcwd(owd, sizeof owd);
 	  chdir(args[1]);
-	  strcpy(cwd, getcwd(NULL, 0));
+	  getcwd(cwd, sizeof cwd);
   } else{
 	  printf("No directory called: %s\n",args[1]);
   }
+  free(tmp);
+  free(cwd);
 }
-
+/*
+ * Name: this function is called and prints the environment when the printenv command is typed into our shell.
+ * Function: this function prints the environment or prints a specific environment variable that the user wants.
+ * Param: args, the argument list for the printenv command. environ, the state of the environment.y
+ * Returns: Printenv returns nothing.
+ * Side Effects: Printenv doesn't change anything outside of itself.
+ */
 void printenv(char **args, char **environ){
     int i = 0;
     char *env;
@@ -300,14 +349,16 @@ void printenv(char **args, char **environ){
 	printf("%s: Too many arguments.\n",args[0]);
     }
 }
-
+/*
+ * Name: this function is called and sets the environment when the setenv command is typed into our shell.
+ * Function: this will allow the user to set the environment or change any environment variable
+ * Param: args, the argument list for the setenv command. environ, the state of the environment. pathlist, used 
+ * to create a new linked list when PATH is changed. this allows us to change the PATH and free the old one.
+ * Return: Setenviron returns nothing.
+ * Side Effects: Setenviron changes HOME and PATH to user set input or can make a new variable set to user input.
+ */
 void setenviron(char **args, char **environ, struct pathelement *pathlist){
     struct pathelement *newPath, *tmp;
-     /*
-     * For some reason when you set some env variable
-     * you then cannot print our the env. I think it 
-     * has something to do with the args list!
-     */
 
     if(args[1] == NULL){
 	printenv(args,environ);
@@ -325,18 +376,27 @@ void setenviron(char **args, char **environ, struct pathelement *pathlist){
 		free(tmp);
 	    }
 	    pathlist = newPath;//set the head of newPath to pathlist
+	    free(newPath);
 	}
 	else if(strcmp(args[1], "HOME") == 0){//check if the user us changing HOME
 	    setenv(args[1],args[2],1);//change the env variable to be what the user inputted
 	}
         else{
-	   setenv(args[1],args[2],0);
+	   setenv(args[1],args[2],1);
 	}	   
     }
     else{
 	printf("%s: Too many arguments.\n",args[0]);
     }
 }
+
+/*
+ * Name: this function is called when the kill command is typed into our shell.
+ * Function: this function will kill the process that the user wants and sent a SIGTERM to it.
+ * Param: args is an array that keeps track of the arguments that the user types. This will be taken is as a pid for the kill function.
+ * Side Effects: doesn't change anything outside of the kill function, but kills the process.
+ * Returns: none
+ */
 
 void killProcess(char **args){
 	if(args[2] == NULL){ // given just a pid, sends a sigterm to it
@@ -348,10 +408,49 @@ void killProcess(char **args){
 	}
 }
 
-void exitShell(char *buffer, char *prompt, char **args){
+/*
+ * Name: This function is called promptUser because the user can type in a prompt that will appear before the path.
+ * Function: PromptUser takes in user input then puts that string in front of the path.
+ * Param: Prompt takes in the array of arguments and the old prompt string.
+ * Side Effects: PromptUser doesn't change anything outside of itself.
+ * Returns: PromptUser returns nothing.
+ */
+void promptUser(char **args, char *prompt){
+
+	if(args[1] == NULL){
+		printf("input prompt prefix: ");
+		if(fgets(prompt,MAX,stdin) != NULL){
+			prompt[(int) (strlen(prompt))-1] = '\0';
+		}
+	}
+	else if(args[1] != NULL && args[2] == NULL){
+		strcpy(prompt,args[1]);
+	}
+	else{
+		printf("%s: Too many arguments.\n",args[0]);
+	}
+}
+
+/*
+ * Name: this function is called when the command exit is typed.
+ * Function: this frees memory and is responsible for exiting the shell.
+ * Param: buffer, prompt, args all need to be freed at the end of our program.
+ * Side Effects: doesn't change anything, but we need to free memory of everything we allocated memory for.
+ * Returns: void, no returns
+ */
+
+void exitShell(char *buffer, char *prompt, struct pathelement *pathlist, char *pwd, char *owd, char *cwd){
+  struct pathelement *tmp;
   free(buffer);
   free(prompt);
-  free(args);
+  free(pwd);
+  free(owd);
+  free(cwd);
+  while(pathlist != NULL){
+	  tmp = pathlist->next;
+	  free(pathlist);
+	  pathlist = tmp;
+  }
   exit(0);
 }
 

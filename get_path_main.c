@@ -1,3 +1,5 @@
+//Brendan Green and Ryan Allarey
+
 #include "get_path.h"
 
 main()

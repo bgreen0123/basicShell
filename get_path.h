@@ -1,3 +1,5 @@
+//Brendan Green and Ryan Allarey
+
 /* 
   get_path.h
   Ben Miller
